@@ -127,7 +127,8 @@ function ago(unix: number): string {
   const s = Math.max(0, Math.floor(Date.now() / 1000) - unix)
   if (s < 3600) return `${Math.max(1, Math.floor(s / 60))} min ago`
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`
-  return `${Math.floor(s / 86400)} days ago`
+  const d = Math.floor(s / 86400)
+  return `${d} day${d === 1 ? "" : "s"} ago`
 }
 
 const isTrusted = (a: string) => attestors.has(a.toLowerCase())
