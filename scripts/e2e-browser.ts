@@ -159,6 +159,9 @@ await send("Page.addScriptToEvaluateOnNewDocument", {
     }
   })()`,
 })
+// A hash change keeps the same document, so leave the page first for the injected provider to load.
+await send("Page.navigate", { url: "about:blank" })
+await sleep(500)
 await send("Page.navigate", { url: `${SITE}#/r/${filed.entityKey}` })
 await waitFor(`!!document.getElementById("cw")`, 20000)
 await evaluate(`document.getElementById("note").value = "Seen the same channel (synthetic)."; document.getElementById("cw").click(); true`)
