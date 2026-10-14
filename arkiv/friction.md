@@ -36,7 +36,7 @@ Reproduce:
     import { u64 } from "@arkiv-network/sdk/attr"
     gte("$createdAt", u64(1))
 
-Fix: correct AGENTS.md to point at a numeric user attribute. We store reportedAt as a u64 of Unix seconds and range on that. The SDK's error message was clear enough to fix it in a minute.
+Fix: correct AGENTS.md to point at a numeric user attribute. We store reported_at as a u64 of Unix seconds and range on that. The SDK's error message was clear enough to fix it in a minute.
 
 ## 3. Public client type hides viem actions that exist at runtime
 

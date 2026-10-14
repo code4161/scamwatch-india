@@ -62,9 +62,9 @@ export const A = {
   target: "target",
   category: "category",
   severity: "severity",
-  reportedAt: "reportedAt",
+  reportedAt: "reported_at",
   report: "report",
-  confirmedAt: "confirmedAt",
+  confirmedAt: "confirmed_at",
   attestor: "attestor",
   label: "label",
 } as const

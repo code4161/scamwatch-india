@@ -35,7 +35,7 @@ Schema, expiry per type and every query string: [arkiv/schema.md](arkiv/schema.m
 
 | feature | where in code | what the user sees | why |
 |---|---|---|---|
-| Typed attributes vs payload | src/lib/writer.ts, reportCreate | the check box and filters | kind, target, category are str for exact match; severity and reportedAt are u64 for ranges; description and evidence sit in the payload because nobody filters on them |
+| Typed attributes vs payload | src/lib/writer.ts, reportCreate | the check box and filters | kind, target, category are str for exact match; severity and reported_at are u64 for ranges; description and evidence sit in the payload because nobody filters on them |
 | Compound predicates and OR | src/lib/registry.ts, checkTarget | checking pay.x.example finds a report against x.example | one query covers the host and each parent domain |
 | Numeric ranges and cursor pagination | src/lib/registry.ts, browse | Browse page: severity from/to, "filed in the last 7 days", Load more | ranges need numbers; the next page uses the cursor the SDK returns |
 | createdBy | src/lib/registry.ts, trustedAttestors and attestedReports | the Attested badge and the Attested page | trust is the signer, not a field |

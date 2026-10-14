@@ -18,7 +18,7 @@ Indian retail investors lose money every day to fake trading apps, "guaranteed I
 
 Challenges I ran into:
 
-The faucet needs a browser wallet sign-in and a CAPTCHA, and our build key never leaves a secret manager, so funding the wallet needed a separate step. AGENTS.md suggests range-filtering on $createdAt, which SDK 0.8.1 refuses because the field is not indexed; we store reportedAt as a u64 instead. A confirmation has to keep a report alive without being able to edit it, which led to read-only reports with permissionless extension and a batch that creates the confirmation and extends the report in one transaction. Lifetime Extension sets an expiry rather than adding to it, so a naive 30-day extension of a report with more time left would revert the whole batch; we extend to an absolute block 30 days past the later of the current expiry and the head. Keeping personal data off the chain meant writing a normaliser that refuses phone numbers, UPI IDs, emails and wa.me links before anything is signed.
+The faucet needs a browser wallet sign-in and a CAPTCHA, and our build key never leaves a secret manager, so funding the wallet needed a separate step. AGENTS.md suggests range-filtering on $createdAt, which SDK 0.8.1 refuses because the field is not indexed; we store reported_at as a u64 instead. A confirmation has to keep a report alive without being able to edit it, which led to read-only reports with permissionless extension and a batch that creates the confirmation and extends the report in one transaction. Lifetime Extension sets an expiry rather than adding to it, so a naive 30-day extension of a report with more time left would revert the whole batch; we extend to an absolute block 30 days past the later of the current expiry and the head. Keeping personal data off the chain meant writing a normaliser that refuses phone numbers, UPI IDs, emails and wa.me links before anything is signed.
 
 ## Arkiv questions
 
@@ -32,7 +32,7 @@ A scam blocklist is only useful if the people on it cannot remove it. On Postgre
 
 4. How do you use Arkiv?
 
-Attributes vs payload: kind, target and category are str attributes for exact matches; severity and reportedAt are u64 for ranges; description and evidence sit in the JSON payload because nothing filters on them. https://github.com/code4161/scamwatch-india/blob/main/src/lib/writer.ts
+Attributes vs payload: kind, target and category are str attributes for exact matches; severity and reported_at are u64 for ranges; description and evidence sit in the JSON payload because nothing filters on them. https://github.com/code4161/scamwatch-india/blob/main/src/lib/writer.ts
 
 Compound queries with OR: the check box matches kind plus the host and every parent domain in one query, so pay.x.example finds a report on x.example. https://github.com/code4161/scamwatch-india/blob/main/src/lib/registry.ts
 

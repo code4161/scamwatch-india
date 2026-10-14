@@ -17,7 +17,7 @@ One scam website, Android app, Telegram channel or WhatsApp channel, filed by an
 | target | str | the normalised target: a lower-case host without www for a site, an Android package id for an app, a lower-case handle for Telegram, a channel id for WhatsApp |
 | category | str | fake_trading_app, tips_group, fake_sebi_claim, broker_clone or ponzi_other |
 | severity | u64 | 1 to 5, numeric so it takes a range |
-| reportedAt | u64 | Unix seconds when filed, numeric so it takes a range |
+| reported_at | u64 | Unix seconds when filed, numeric so it takes a range |
 
 Payload (application/json): title, description, evidence, an optional regulatorUrl (a public register where the reader can check a claim, such as SEBI's Investment Adviser register), and synthetic (true for demo data).
 
@@ -39,7 +39,7 @@ Another wallet vouching for a report.
 | report | key | the report's entity key |
 | kind | str | copied from the report |
 | target | str | copied from the report, so a target's whole history is one query |
-| confirmedAt | u64 | Unix seconds |
+| confirmed_at | u64 | Unix seconds |
 
 Payload: note, synthetic.
 
@@ -79,7 +79,7 @@ Is this link reported? Exact target, compound with kind. For a website the host 
 
 Recent reports by category and severity range, optionally filed since a time. Cursor pagination, 10 per page in the browser, 200 per page in the CLI; sorted newest first in the client because Arkiv has no server-side ordering.
 
-    app = str('scamwatch-in') AND type = str('report') AND severity >= u64(3) AND severity <= u64(5) AND category = str('tips_group') AND reportedAt >= u64(1760000000)
+    app = str('scamwatch-in') AND type = str('report') AND severity >= u64(3) AND severity <= u64(5) AND category = str('tips_group') AND reported_at >= u64(1760000000)
 
 Trusted attestors (createdBy the curator):
 
