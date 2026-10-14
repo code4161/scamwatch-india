@@ -20,7 +20,7 @@ import {
 } from "../src/lib/registry"
 import { normaliseTarget } from "../src/lib/normalise"
 import { addAttestor, confirmReport, fileReport, fileReports, renewAttestor } from "../src/lib/writer"
-import { accountFor, publicClient, ROLES, type Role, walletFor } from "./wallets"
+import { accountFor, publicClient, ROLES, type Role, usage, walletFor } from "./wallets"
 import { PARTNER_ATTESTOR, SEED, seedReportedAt } from "./seed-data"
 
 const reader = publicClient as any
@@ -212,6 +212,9 @@ async function cmdVerify() {
   console.log(`reports confirmed or filed by trusted attestors: ${attested.length}`)
   const q = browseQuery(reader, { category: "tips_group", minSeverity: 3, maxSeverity: 5 })
   console.log(`\nexample browse query string:\n  ${q.toString()}`)
+  console.log(
+    `\nRPC usage for this verify: ${usage.calls} HTTP calls, ${usage.cost} cost units (Arkiv-Cost header); budget left ${usage.remaining ?? "?"} of ${usage.limit ?? "?"}`,
+  )
 }
 
 const [cmd, ...rest] = process.argv.slice(2)

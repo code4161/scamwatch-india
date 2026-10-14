@@ -76,7 +76,7 @@ function safeJson(e: Raw): any {
   }
 }
 
-function toReport(e: Raw): Report {
+export function toReport(e: Raw): Report {
   const p = safeJson(e)
   return {
     key: e.key,

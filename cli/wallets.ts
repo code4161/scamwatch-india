@@ -34,7 +34,25 @@ export function accountFor(role: Role) {
   return privateKeyToAccount(keyFor(role))
 }
 
-export const publicClient = createPublicClient({ chain: tiramisu, transport: http() })
+// Query cost as the RPC reports it, so verify can say what one full read of the registry costs.
+export const usage = { calls: 0, cost: 0, remaining: undefined as number | undefined, limit: undefined as number | undefined }
+
+// retryCount 0: on a 429 viem otherwise sleeps the whole Retry-After before failing.
+export const publicClient = createPublicClient({
+  chain: tiramisu,
+  transport: http(undefined, {
+    retryCount: 0,
+    onFetchResponse(res) {
+      usage.calls++
+      usage.cost += Number(res.headers.get("Arkiv-Cost") ?? 0)
+      const m = /limit=(\d+),\s*remaining=(\d+)/.exec(res.headers.get("RateLimit") ?? "")
+      if (m) {
+        usage.limit = Number(m[1])
+        usage.remaining = Number(m[2])
+      }
+    },
+  }),
+})
 
 export function walletFor(role: Role) {
   return createWalletClient({ chain: tiramisu, transport: http(), account: accountFor(role) })

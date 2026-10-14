@@ -5,8 +5,8 @@ import "./style.css"
 import { createPublicClient, createWalletClient } from "@arkiv-network/sdk"
 import { tiramisu } from "@arkiv-network/sdk/chains"
 import { custom, type Hex, http, webSocket } from "viem"
-import { key } from "@arkiv-network/sdk/attr"
-import { eq } from "@arkiv-network/sdk/query"
+import { key, str } from "@arkiv-network/sdk/attr"
+import { eq, or } from "@arkiv-network/sdk/query"
 import { CURATOR, EXPLORER, RPC_HTTP, RPC_WS } from "../lib/config"
 import {
   type Attestor,
@@ -23,6 +23,7 @@ import {
   type Reader,
   type Report,
   recentReports,
+  toReport,
   trustedAttestors,
 } from "../lib/registry"
 import { domainCandidates, guessKind, normaliseTarget, RejectedTarget } from "../lib/normalise"
@@ -40,7 +41,40 @@ import { confirmReport } from "../lib/writer"
 
 // ---------- clients ----------
 
-const reader = createPublicClient({ chain: tiramisu, transport: http(RPC_HTTP) }) as unknown as Reader
+// retryCount 0: on a 429 viem would otherwise sleep for the whole Retry-After (often most of an
+// hour) before failing, and the page would look frozen. The response headers carry the budget.
+const budget = { remaining: undefined as number | undefined, limit: undefined as number | undefined, resetSec: 0 }
+const reader = createPublicClient({
+  chain: tiramisu,
+  transport: http(RPC_HTTP, {
+    retryCount: 0,
+    onFetchResponse(res) {
+      const m = /limit=(\d+),\s*remaining=(\d+),\s*reset=(\d+)/.exec(res.headers.get("RateLimit") ?? "")
+      if (m) {
+        budget.limit = Number(m[1])
+        budget.remaining = Number(m[2])
+        budget.resetSec = Number(m[3])
+        showBudget()
+      }
+    },
+  }),
+}) as unknown as Reader
+
+function showBudget() {
+  const el = document.getElementById("budget")
+  if (el && budget.limit !== undefined) {
+    el.textContent = ` · public RPC budget for your connection: ${budget.remaining} of ${budget.limit} cost units left`
+  }
+}
+
+function friendly(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (/429|ANON_COST_LIMITED|Too Many Requests/i.test(msg)) {
+    const mins = Math.ceil((budget.resetSec || 3600) / 60)
+    return `Arkiv's public RPC has used up the free query budget for your connection. It resets in about ${mins} minutes. The data is still on chain; anyone with their own budget or an Arkiv access key can read it.`
+  }
+  return msg
+}
 // watchEntityEvents opens a real subscription only over a WebSocket transport, and only without
 // fromBlock. Over HTTP it would silently poll.
 const live = createPublicClient({ chain: tiramisu, transport: webSocket(RPC_WS) }) as unknown as Reader
@@ -192,8 +226,14 @@ async function runCheck() {
     return
   }
   out.innerHTML = `<p class="muted">Querying Arkiv…</p>`
-  const rows = await checkTarget(reader, kind, target)
-  await loadConfs(rows)
+  let rows: Report[]
+  try {
+    rows = await checkTarget(reader, kind, target)
+    await loadConfs(rows)
+  } catch (e) {
+    out.innerHTML = `<div class="verdict warn">${esc(friendly(e))}</div>`
+    return
+  }
   const tried = kind === "site" ? domainCandidates(target) : [target]
   const queryText = `app = str('scamwatch-in') AND type = str('report') AND kind = str('${kind}') AND ${
     tried.length > 1 ? `(${tried.map((t) => `target = str('${t}')`).join(" OR ")})` : `target = str('${tried[0]}')`
@@ -228,8 +268,13 @@ async function renderFeed() {
   const el = document.getElementById("feed")
   if (!el) return
   if (feed.length === 0) {
-    feed = await recentReports(reader, 60)
-    await loadConfs(feed)
+    try {
+      feed = await recentReports(reader, 60)
+      await loadConfs(feed)
+    } catch (e) {
+      el.innerHTML = `<p class="muted">${esc(friendly(e))}</p>`
+      return
+    }
   }
   const el2 = document.getElementById("feed")
   if (!el2) return
@@ -429,43 +474,68 @@ function viewAbout() {
 
 // ---------- live events ----------
 
+// The public RPC gives each anonymous connection a budget of query cost units. A live feed that
+// read back every entity created on the network spent it in minutes, so events are filtered on
+// their creation flags first and the survivors are read in one batched query.
+const REPORT_FLAGS = 3 // readonly + permissionlessExtension, as reportCreate sets them
+const CONFIRMATION_FLAGS = 1 // readonly
+let liveQueue: { key: Hex; block: bigint }[] = []
+let liveTimer: ReturnType<typeof setTimeout> | undefined
+
+function queueLive(key: Hex, block: bigint) {
+  liveQueue.push({ key: key.toLowerCase() as Hex, block })
+  if (!liveTimer) liveTimer = setTimeout(drainLive, 2000)
+}
+
+async function drainLive() {
+  liveTimer = undefined
+  const batch = liveQueue.splice(0, 20)
+  if (liveQueue.length) liveTimer = setTimeout(drainLive, 2000)
+  if (batch.length === 0) return
+  const keys = batch.map((b) => eq("$key", key(b.key)))
+  const page = await reader
+    .select("*")
+    .where(eq("app", str("scamwatch-in")), keys.length === 1 ? keys[0]! : or(...keys))
+    .limit(20)
+    .fetch()
+    .catch(() => undefined)
+  if (!page) return
+  const onHome = location.hash === "" || location.hash === "#/"
+  for (const raw of page.entities as any[]) {
+    const k = raw.key.toLowerCase() as Hex
+    const block = batch.find((b) => b.key === k)?.block
+    const type = raw.attributes?.type?.value
+    if (type === "report") {
+      const r = toReport(raw)
+      confCache.set(k, [])
+      feed = [r, ...feed.filter((x) => x.key.toLowerCase() !== k)]
+      liveLog.unshift(`New report: <a class="mono" href="#/r/${esc(k)}">${esc(r.target)}</a> (block ${block})`)
+    } else if (type === "confirmation") {
+      const target = String(raw.attributes?.report?.value ?? "").toLowerCase()
+      confCache.delete(target)
+      liveLog.unshift(
+        `New confirmation for <a class="mono" href="#/r/${esc(target)}">${esc(raw.attributes?.target?.value ?? short(target))}</a> by ${esc(short(raw.creator))} (block ${block})`,
+      )
+      if (location.hash === `#/r/${target}`) viewReport(target as Hex)
+    }
+  }
+  if (onHome && page.entities.length) {
+    renderLiveLog()
+    await loadConfs(feed)
+    await renderFeed()
+    for (const raw of page.entities as any[]) {
+      flash(raw.key.toLowerCase())
+      flash(String(raw.attributes?.report?.value ?? "").toLowerCase())
+    }
+  }
+}
+
 function startLive() {
   const dot = () => document.getElementById("liveDot")
   live.watchEntityEvents({
-    onEntityCreated: async (ev) => {
-      const k = ev.entityKey.toLowerCase() as Hex
-      // The event carries the key and owner only; read the entity to see whether it is ours.
-      const page = await reader
-        .select("*")
-        .where(eq("$key", key(k)))
-        .limit(1)
-        .fetch()
-      const e: any = page.entities[0]
-      if (!e || e.attributes?.app?.value !== "scamwatch-in") return
-      const type = e.attributes?.type?.value
-      if (type === "report") {
-        const r = await getReport(reader, k)
-        if (!r) return
-        confCache.set(k, [])
-        feed = [r, ...feed.filter((x) => x.key.toLowerCase() !== k)]
-        liveLog.unshift(`New report: <a class="mono" href="#/r/${esc(k)}">${esc(r.target)}</a> (block ${ev.blockNumber})`)
-        if (location.hash === "" || location.hash === "#/") {
-          renderLiveLog()
-          renderFeed()
-          flash(k)
-        }
-      } else if (type === "confirmation") {
-        const target = e.attributes?.report?.value?.toLowerCase()
-        if (target) confCache.delete(target)
-        liveLog.unshift(`New confirmation for <a class="mono" href="#/r/${esc(target)}">${esc(e.attributes?.target?.value ?? short(target))}</a> by ${esc(short(e.creator))}`)
-        if (location.hash === "" || location.hash === "#/") {
-          renderLiveLog()
-          await loadConfs(feed)
-          renderFeed()
-          flash(target)
-        } else if (location.hash === `#/r/${target}`) viewReport(target)
-      } else if (type === "attestor" && e.creator.toLowerCase() === CURATOR.toLowerCase()) {
-        attestors = await trustedAttestors(reader, CURATOR)
+    onEntityCreated: (ev) => {
+      if (ev.creationFlags.raw === REPORT_FLAGS || ev.creationFlags.raw === CONFIRMATION_FLAGS) {
+        queueLive(ev.entityKey, ev.blockNumber)
       }
     },
     onExpiryExtended: (ev) => {
@@ -500,7 +570,7 @@ async function route() {
     else if (h === "/about") viewAbout()
     else viewCheck()
   } catch (e) {
-    app.innerHTML = `<section><h1>Could not reach Arkiv</h1><p>${esc(e instanceof Error ? e.message : e)}</p></section>`
+    app.innerHTML = `<section><h1>Could not reach Arkiv</h1><p>${esc(friendly(e))}</p></section>`
   }
   for (const a of document.querySelectorAll<HTMLAnchorElement>("nav a")) {
     a.classList.toggle("active", a.getAttribute("href") === `#${h}`)
@@ -511,15 +581,18 @@ async function boot() {
   try {
     head = await reader.getBlockNumber()
     setNet(`Live on Arkiv Tiramisu (chain ${tiramisu.id}) · block ${head} · read directly from the public RPC`)
+    net.insertAdjacentHTML("beforeend", `<span id="budget"></span>`)
+    showBudget()
   } catch (e) {
-    setNet("Cannot reach the Arkiv RPC right now.", false)
+    setNet(friendly(e), false)
   }
   // The SDK's client type narrows viem's public actions to a subset; watchBlockNumber is present
   // at runtime but missing from the type (see arkiv/friction.md).
   ;(live as any).watchBlockNumber({
     onBlockNumber: (b: bigint) => {
       head = b
-      net.textContent = net.textContent!.replace(/block \d+/, `block ${b}`)
+      const t = net.firstChild
+      if (t && t.nodeType === Node.TEXT_NODE) t.textContent = t.textContent!.replace(/block \d+/, `block ${b}`)
       tickExpiries()
     },
   })
