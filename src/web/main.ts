@@ -41,6 +41,20 @@ import { confirmReport } from "../lib/writer"
 
 // ---------- clients ----------
 
+// The per-minute request limit resets within a minute, so one short wait is worth it; the hourly
+// cost budget can be most of an hour away, so that 429 is shown to the reader instead.
+async function politeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init)
+  if (res.status !== 429) return res
+  const wait = Number(res.headers.get("Retry-After") ?? 0)
+  if (wait > 0 && wait <= 65) {
+    setNet(`Waiting ${wait} s for the public RPC's per-minute limit…`, false)
+    await new Promise((r) => setTimeout(r, wait * 1000))
+    return fetch(input, init)
+  }
+  return res
+}
+
 // retryCount 0: on a 429 viem would otherwise sleep for the whole Retry-After (often most of an
 // hour) before failing, and the page would look frozen. The response headers carry the budget.
 const budget = { remaining: undefined as number | undefined, limit: undefined as number | undefined, resetSec: 0 }
@@ -48,6 +62,7 @@ const reader = createPublicClient({
   chain: tiramisu,
   transport: http(RPC_HTTP, {
     retryCount: 0,
+    fetchFn: politeFetch,
     onFetchResponse(res) {
       const m = /limit=(\d+),\s*remaining=(\d+),\s*reset=(\d+)/.exec(res.headers.get("RateLimit") ?? "")
       if (m) {
@@ -63,7 +78,7 @@ const reader = createPublicClient({
 function showBudget() {
   const el = document.getElementById("budget")
   if (el && budget.limit !== undefined) {
-    el.textContent = ` · public RPC budget for your connection: ${budget.remaining} of ${budget.limit} cost units left`
+    el.textContent = ` · public RPC allowance for your connection: ${budget.remaining} of ${budget.limit} left in this window (RateLimit header)`
   }
 }
 
@@ -356,7 +371,15 @@ async function viewAttested() {
       }</div>`,
     )
     .join("")
-  const rows = await attestedReports(reader, attestors.keys())
+  const known = new Map(feed.map((r) => [r.key.toLowerCase(), r] as const))
+  let rows: { report: Report; by: Hex[] }[]
+  try {
+    rows = await attestedReports(reader, attestors.keys(), known)
+  } catch (e) {
+    const ar = document.getElementById("ar")
+    if (ar) ar.innerHTML = `<p class="muted">${esc(friendly(e))}</p>`
+    return
+  }
   await loadConfs(rows.map((r) => r.report))
   const ar = document.getElementById("ar")
   if (ar) ar.innerHTML = rows.length ? rows.map((r) => card(r.report)).join("") : `<p class="muted">None yet.</p>`
@@ -364,13 +387,14 @@ async function viewAttested() {
 
 async function viewReport(k: Hex) {
   app.innerHTML = `<p class="muted">Reading entity ${esc(short(k))} from Arkiv…</p>`
-  const r = await getReport(reader, k)
+  const lk = k.toLowerCase()
+  const r = feed.find((x) => x.key.toLowerCase() === lk) ?? (await getReport(reader, k))
   if (!r) {
     app.innerHTML = `<section><h1>Not found</h1><p>No live report with key <span class="mono">${esc(k)}</span>. It may have reached its Entity Expiration without enough confirmations. Its creation transaction is still on the <a href="${EXPLORER}/entity/${esc(k)}" target="_blank" rel="noopener">explorer</a>.</p></section>`
     return
   }
-  const confs = await confirmationsFor(reader, k)
-  confCache.set(k.toLowerCase(), confs)
+  const confs = confCache.get(lk) ?? (await confirmationsFor(reader, k))
+  confCache.set(lk, confs)
   const indep = independentConfirmers(r, confs)
   const trust = trustOf(r, confs)
   app.innerHTML = `
@@ -476,7 +500,7 @@ function viewAbout() {
 
 // The public RPC gives each anonymous connection a budget of query cost units. A live feed that
 // read back every entity created on the network spent it in minutes, so events are filtered on
-// their creation flags first and the survivors are read in one batched query.
+// their creation flags first and the survivors are read in one batched query, at most every 10 s.
 const REPORT_FLAGS = 3 // readonly + permissionlessExtension, as reportCreate sets them
 const CONFIRMATION_FLAGS = 1 // readonly
 let liveQueue: { key: Hex; block: bigint }[] = []
@@ -484,13 +508,16 @@ let liveTimer: ReturnType<typeof setTimeout> | undefined
 
 function queueLive(key: Hex, block: bigint) {
   liveQueue.push({ key: key.toLowerCase() as Hex, block })
-  if (!liveTimer) liveTimer = setTimeout(drainLive, 2000)
+  if (!liveTimer) liveTimer = setTimeout(drainLive, Math.max(2000, lastDrain + 10000 - Date.now()))
 }
+
+let lastDrain = 0
 
 async function drainLive() {
   liveTimer = undefined
+  lastDrain = Date.now()
   const batch = liveQueue.splice(0, 20)
-  if (liveQueue.length) liveTimer = setTimeout(drainLive, 2000)
+  if (liveQueue.length) liveTimer = setTimeout(drainLive, 10000)
   if (batch.length === 0) return
   const keys = batch.map((b) => eq("$key", key(b.key)))
   const page = await reader
@@ -597,6 +624,12 @@ async function boot() {
     },
   })
   attestors = await trustedAttestors(reader, CURATOR).catch(() => attestors)
+  // One read of the whole registry (it is small) serves the feed, report pages and the Attested
+  // page from memory, so a visit costs a handful of queries against the anonymous budget.
+  try {
+    feed = await recentReports(reader, 200)
+    await loadConfs(feed)
+  } catch {}
   window.addEventListener("hashchange", route)
   await route()
   startLive()

@@ -232,39 +232,51 @@ export async function trustedAttestors(client: Reader, curator: Hex): Promise<Ma
 }
 
 /**
- * Query 3: reports confirmed by trusted attestors. createdBy() on each attestor's confirmations,
- * then the reports they point at. Trust comes from $creator, never from a writable field.
+ * Query 3: reports filed or confirmed by trusted attestors. Trust comes from $creator, never from
+ * a writable field. Two queries whatever the number of attestors (an OR over $creator), then the
+ * reports by key unless the caller already holds them. The anonymous RPC budget is about 100
+ * queries an hour, so every read here is counted.
  */
 export async function attestedReports(
   client: Reader,
   attestors: Iterable<string>,
+  known?: Map<string, Report>,
 ): Promise<{ report: Report; by: Hex[] }[]> {
+  const list = [...attestors]
+  if (list.length === 0) return []
+  const creators = list.length === 1 ? eq("$creator", addr(list[0]!)) : or(...list.map((a) => eq("$creator", addr(a))))
   const byReport = new Map<string, Set<Hex>>()
-  for (const a of attestors) {
-    const confs = await all(
-      client.select(FULL).where(...ofType("confirmation")).createdBy(a as Hex),
-      toConfirmation,
-    )
-    for (const c of confs) {
-      if (!byReport.has(c.report)) byReport.set(c.report, new Set())
-      byReport.get(c.report)!.add(a as Hex)
-    }
-    // Reports an attestor filed itself also count as attested.
-    const own = await all(
-      client.select({ key: true }).where(...ofType("report")).createdBy(a as Hex),
-      (e) => e.key.toLowerCase(),
-    )
-    for (const k of own) {
-      if (!byReport.has(k)) byReport.set(k, new Set())
-      byReport.get(k)!.add(a as Hex)
-    }
+  const add = (k: string, a: Hex) => {
+    if (!byReport.has(k)) byReport.set(k, new Set())
+    byReport.get(k)!.add(a.toLowerCase() as Hex)
   }
+  const confs = await all(client.select(FULL).where(...ofType("confirmation"), creators), toConfirmation)
+  for (const c of confs) add(c.report, c.creator)
+  const own = await all(client.select(FULL).where(...ofType("report"), creators), toReport)
+  const reports = new Map<string, Report>(known ?? [])
+  for (const r of own) {
+    reports.set(r.key.toLowerCase(), r)
+    add(r.key.toLowerCase(), r.creator)
+  }
+  const missing = [...byReport.keys()].filter((k) => !reports.has(k))
+  for (const r of await reportsByKey(client, missing as Hex[])) reports.set(r.key.toLowerCase(), r)
   const out: { report: Report; by: Hex[] }[] = []
   for (const [k, by] of byReport) {
-    const r = await getReport(client, k as Hex)
+    const r = reports.get(k)
     if (r) out.push({ report: r, by: [...by] })
   }
-  return out.sort((a, b) => b.report.reportedAt - a.report.reportedAt)
+  return out.sort((x, y) => y.report.reportedAt - x.report.reportedAt)
+}
+
+/** Reports by key, 20 keys to one OR query. */
+export async function reportsByKey(client: Reader, keys: Hex[]): Promise<Report[]> {
+  const out: Report[] = []
+  for (let i = 0; i < keys.length; i += 20) {
+    const chunk = keys.slice(i, i + 20)
+    const pred = chunk.length === 1 ? eq("$key", key(chunk[0]!)) : or(...chunk.map((k) => eq("$key", key(k))))
+    out.push(...(await all(client.select(FULL).where(...ofType("report"), pred), toReport)))
+  }
+  return out
 }
 
 /** Confirmations for many reports in one OR query, so the feed can show counts per card. */

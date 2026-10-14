@@ -13,6 +13,7 @@ import {
   browseQuery,
   checkTarget,
   confirmationsFor,
+  confirmationsForMany,
   getReport,
   independentConfirmers,
   recentReports,
@@ -195,14 +196,16 @@ async function cmdVerify() {
   const head = await headBlock()
   const reports = await recentReports(reader, 1000)
   const attestors = await trustedAttestors(reader, CURATOR)
-  const attested = await attestedReports(reader, attestors.keys())
+  const known = new Map(reports.map((r) => [r.key.toLowerCase(), r] as const))
+  const attested = await attestedReports(reader, attestors.keys(), known)
+  const confMap = await confirmationsForMany(reader, reports.map((r) => r.key))
   let confTotal = 0
   console.log(`head block ${head}`)
   console.log(`trusted attestors (createdBy ${CURATOR}): ${attestors.size}`)
   for (const a of attestors.values()) console.log(`  ${a.attestor} ${a.label}`)
   console.log(`live reports: ${reports.length}`)
   for (const r of reports) {
-    const confs = await confirmationsFor(reader, r.key)
+    const confs = confMap.get(r.key.toLowerCase()) ?? []
     confTotal += confs.length
     console.log(
       `  ${r.key.slice(0, 10)} ${r.kind.padEnd(16)} ${r.target.padEnd(38)} sev ${r.severity} conf ${independentConfirmers(r, confs).length} expires in ${days(r.expiresAt - head).toFixed(1)}d flags ro=${r.readonly} pe=${r.permissionlessExtension}`,
@@ -213,7 +216,7 @@ async function cmdVerify() {
   const q = browseQuery(reader, { category: "tips_group", minSeverity: 3, maxSeverity: 5 })
   console.log(`\nexample browse query string:\n  ${q.toString()}`)
   console.log(
-    `\nRPC usage for this verify: ${usage.calls} HTTP calls, ${usage.cost} cost units (Arkiv-Cost header); budget left ${usage.remaining ?? "?"} of ${usage.limit ?? "?"}`,
+    `\nRPC usage for this verify: ${usage.calls} HTTP calls, ${usage.cost} cost units (Arkiv-Cost header); RateLimit header: ${usage.remaining ?? "?"} of ${usage.limit ?? "?"} left in the current window`,
   )
 }
 
