@@ -6,7 +6,7 @@ Live app: **https://code4161.github.io/scamwatch-india/**
 
 Tracks: Best Indian Use Case, Censorship Resistance, Security.
 
-Demo video: [docs/demo.mp4](docs/demo.mp4) (1 minute 55 seconds; shot list and narration in [docs/demo-script.md](docs/demo-script.md)).
+Demo video: **https://code4161.github.io/scamwatch-india/demo.mp4** (1 minute 55 seconds; the file is [docs/demo.mp4](docs/demo.mp4), shot list and narration in [docs/demo-script.md](docs/demo-script.md)). GitHub's file view does not play video, so the link goes to the copy GitHub Pages serves.
 
 ## Who uses it
 
