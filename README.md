@@ -70,9 +70,12 @@ Created on 2026-10-14, first entity at 17:31 UTC (block 574656). Read back with 
 |---|---|---|
 | attestor entity (curator lists the partner) | 1 | [tx 0x523bdf23...](https://tiramisu.explorer.arkiv.network/tx/0x523bdf2325f6b2f7f10205aee95bec106cbccbb38447584ab41556fe32548c1f) |
 | seed reports, filed as one batch per reporter | 12 | [4-report batch 0xd5ce2555...](https://tiramisu.explorer.arkiv.network/tx/0xd5ce25556b85529a08bc68610bf630c2b0a5ed8f4b2af901ca1d895df0eeda3d) |
-| confirmations, each batched with a Lifetime Extension | 13 | [confirm batch 0xbc6e81d4...](https://tiramisu.explorer.arkiv.network/tx/0xbc6e81d40ef78bb08b754f326930df23ec3c020b7e56464261edafd68ab7d4b1) |
+| seed confirmations, each batched with a Lifetime Extension | 13 | [confirm batch 0xbc6e81d4...](https://tiramisu.explorer.arkiv.network/tx/0xbc6e81d40ef78bb08b754f326930df23ec3c020b7e56464261edafd68ab7d4b1) |
+| reports and confirmations written by the browser end-to-end check (scripts/e2e-browser.ts), targets swdemo_upper_circuit_* | 4 and 2 | [report tx 0x1c44414b...](https://tiramisu.explorer.arkiv.network/tx/0x1c44414b765ab47ad83867c3b1268346cfb9aa8a492c7fc8b1816b15acbde08f) |
 
-The report with the longest life shows the lease at work: [doubleyourmoney-in30days.example](https://tiramisu.explorer.arkiv.network/entity/0xc70641410d53fc0b6a280a484bad195825f458fd28246c8a2ec666542cc1a8b5) was filed with 7 days and confirmed by three wallets, so it now expires at block 4765119, 97 days after filing. Reports nobody confirmed (four of the twelve) expire 7 days after filing, on 2026-10-21.
+The report with the longest life shows the lease at work: [doubleyourmoney-in30days.example](https://tiramisu.explorer.arkiv.network/entity/0xc70641410d53fc0b6a280a484bad195825f458fd28246c8a2ec666542cc1a8b5) was filed with 7 days and confirmed by three wallets, so it now expires at block 4765119, 97 days after filing. Reports nobody confirmed (four of the twelve seed reports, two of the test reports) expire 7 days after filing, on 2026-10-21.
+
+The browser end-to-end check opens the deployed site in headless Chrome, files a report from the CLI library and asserts that it appears in the live feed with no reload, then presses the page's own "Confirm with browser wallet" button with a test wallet provider injected as window.ethereum (it signs in the Node process; the key never enters the page). Its last run on 2026-10-14 passed all seven checks.
 
 All demo data is synthetic. Every domain uses the reserved .example TLD, every app id sits under com.example, and every channel handle starts with swdemo. None of it names a real company or person.
 
@@ -98,6 +101,7 @@ Writing needs a funded Tiramisu key in the environment, never in a file:
     npx tsx cli/scamwatch.ts report --kind telegram --target t.me/swdemo_example_channel --category tips_group --severity 3 --title "..." --description "..."
     npx tsx cli/scamwatch.ts confirm --report 0x<report key> --as confirmer1
     npx tsx cli/scamwatch.ts seed     # the synthetic dataset
+    npx tsx scripts/e2e-browser.ts    # headless Chrome check of the deployed site
 
 ## Reproduce
 
@@ -113,5 +117,5 @@ Writing needs a funded Tiramisu key in the environment, never in a file:
         npx tsx cli/scamwatch.ts verify
 
    verify lists every live report with its confirmation count and remaining lifetime, the trusted attestors found by createdBy, a browse query string, and the cost units the run spent as the RPC reports them.
-5. The status bar also shows how much of the public RPC's anonymous query budget your connection has left. Each visitor reads on their own budget; there is no shared key.
+5. The status bar also shows the public RPC's rate-limit header for your connection. Each visitor reads on their own anonymous allowance, with no shared key. One visit costs 3 queries at load (attestors, reports, confirmations); the Attested page adds 2 and each check or browse search adds 1.
 6. Keep the home page open and run a confirm from the CLI. The confirmation appears in the live feed and the report's countdown moves out by 30 days without a reload.

@@ -158,11 +158,13 @@ Actual: after about 40 minutes of building and testing from one IP, every arkiv_
 
 eth_blockNumber and eth_getTransactionReceipt kept working. Two things made this costly. First, viem's HTTP transport honours Retry-After, so an SDK query sleeps for the full 2604 seconds before it fails: our CLI and the web page looked frozen, with no error. Second, our first live feed read back every entity created on the network to find our own (entry 4), and Tiramisu creates entities every block, so an open tab spent the budget on other people's data.
 
-What we changed: the transports use retryCount 0 and show a plain message with the reset time; the page reads the RateLimit header (exposed to browsers through CORS, which helped) and shows the remaining budget in the status bar; the live feed filters EntityCreated events on their creation flags (our reports are created with flags 3, our confirmations with 1) and reads the survivors in one batched OR query every 2 seconds. An access key would raise the limit, but the docs advise keeping it out of the browser, and a backend would undo the censorship-resistance point, so each visitor reads on their own anonymous budget.
+Measured after the reset (2026-10-14 18:33 UTC): every arkiv_query cost **100** units in the Arkiv-Cost header, both for select "*" with limit 200 and for select key with limit 1, so the 10000-unit budget is **100 queries** per window from one IP. A second limit of 600 requests per 60 seconds counts every call; eth_blockNumber carried no Arkiv-Cost header. While under budget, the RateLimit header shows only the per-minute limit, so a client cannot see how much of the 10000 is left until it is gone.
+
+What we changed: the transports use retryCount 0 and show a plain message with the reset time; the page reads the RateLimit header (exposed to browsers through CORS, which helped) and shows the remaining budget in the status bar; the live feed filters EntityCreated events on their creation flags (our reports are created with flags 3, our confirmations with 1) and reads the survivors in one batched OR query, at most once every 10 seconds; one registry read at load serves the feed, report pages and the Attested page from memory, so a visit costs 3 queries at load; and a 429 with a Retry-After of a minute or less is waited out once. An access key would raise the limit, but the docs advise keeping it out of the browser, and a backend would undo the censorship-resistance point, so each visitor reads on their own anonymous budget.
 
 Reproduce: send arkiv_query calls from one IP until the 429 arrives, then call any SDK query with the default http() transport and time it.
 
-Fix: state the anonymous budget (10000 cost units and the window) on the Access Keys page and the cost of a typical query; have the SDK pass retryCount 0 or cap the Retry-After wait for arkiv_query; a server-side filter on watchEntityEvents (entry 4) removes most of the load.
+Fix: state the anonymous budget (10000 cost units, the window, 100 units per query) on the Access Keys page; report the remaining cost budget in a header before it runs out; have the SDK pass retryCount 0 or cap the Retry-After wait for arkiv_query; a server-side filter on watchEntityEvents (entry 4) removes most of the load.
 
 ## 12. Writes, batches and costs (worked)
 
@@ -179,5 +181,5 @@ Actual, measured on 2026-10-14 from transaction receipts at a gas price of about
 | one confirmation plus one Lifetime Extension in one executeBatch | 126,360 | 0.000126 |
 | plain GLM transfer | 21,000 | 0.000021 |
 
-Everything the seven wallets wrote on 2026-10-14 (12 seed reports, 13 confirmations, 1 attestor, the probes in entries 9 and 11 and two end-to-end test reports) cost **0.0038 GLM** in gas, read from the balances afterwards. We gave each demo wallet 0.05 GLM. A read straight after a write saw the new state, so the seed could confirm a report in the block after filing it and stack three confirmations on one report.
+Everything the seven wallets wrote up to the seed and the first two end-to-end runs (12 seed reports, 13 confirmations, 1 attestor, the probes in entries 9 and 11, two test reports) cost **0.0038 GLM** in gas, read from the balances afterwards. We gave each demo wallet 0.05 GLM. A read straight after a write saw the new state, so the seed could confirm a report in the block after filing it and stack three confirmations on one report.
 

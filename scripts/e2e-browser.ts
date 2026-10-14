@@ -165,9 +165,17 @@ await sleep(500)
 await send("Page.navigate", { url: `${SITE}#/r/${filed.entityKey}` })
 await waitFor(`!!document.getElementById("cw")`, 20000)
 await evaluate(`document.getElementById("note").value = "Seen the same channel (synthetic)."; document.getElementById("cw").click(); true`)
-const done = await waitFor(`/Confirmed in one batch|Error|failed|rejected/i.test(document.getElementById("cwOut")?.innerText ?? "")`, 60000)
+// Success shows as the button's message, or as the page re-rendering with the new confirmation
+// when the live feed sees it first.
+const shortSigner = `${signerAddress.slice(0, 6)}…${signerAddress.slice(-4)}`
+const done = await waitFor(
+  `/Confirmed in one batch|Error|failed|rejected/i.test(document.getElementById("cwOut")?.innerText ?? "") || document.querySelector(".confs")?.innerText.includes(${JSON.stringify(shortSigner)})`,
+  60000,
+)
 const out = await evaluate(`document.getElementById("cwOut")?.innerText`)
-check("browser confirm button sends the batch", done && String(out).startsWith("Confirmed"), String(out))
+const listed = await evaluate(`document.querySelector(".confs")?.innerText.includes(${JSON.stringify(shortSigner)})`)
+check("browser confirm button sends the batch", done && (String(out).startsWith("Confirmed") || listed === true), out ? String(out) : `page lists ${shortSigner} under confirmations`)
+check("report page shows 1 independent confirmation", await waitFor(`/1 independent confirmation/.test(document.body.innerText)`, 20000))
 console.log(`provider calls: ${(await evaluate("window.__swCalls.join(', ')")) ?? ""}`)
 const confs = await confirmationsFor(publicClient as any, filed.entityKey as Hex)
 check(

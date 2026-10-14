@@ -66,7 +66,7 @@ watchEntityEvents over WebSocket: the live feed subscribes with a webSocket() tr
 
 8. How can judges reproduce your Arkiv usage?
 
-Open the live app and paste pay.secure-login-tradebrokr.example into the check box; open "Exact query sent to Arkiv" to see the string, then open the report to see $creator, $owner, creation flags, the expiry countdown and each confirmation's signer. Without our site: clone the repo, run npm ci, then npx tsx cli/scamwatch.ts verify, which lists every live report with its confirmations and lifetime and the attestors found by createdBy. The README's Reproduce section has the exact query strings.
+Open the live app and paste pay.secure-login-tradebrokr.example into the check box; open "Exact query sent to Arkiv" to see the string, then open the report to see $creator, $owner, creation flags, the expiry countdown and each confirmation's signer. Without our site: clone the repo, run npm ci, then npx tsx cli/scamwatch.ts verify, which lists every live report with its confirmations and lifetime and the attestors found by createdBy. The README's Reproduce section has the exact query strings. With a funded key, npx tsx scripts/e2e-browser.ts drives the deployed site in headless Chrome: it files a report, checks that the live feed shows it with no reload, and confirms it through the page's own wallet button.
 
 9. Pre-existing work you reused: None.
 
