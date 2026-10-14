@@ -409,11 +409,11 @@ async function viewReport(k: Hex) {
 
     <div class="facts">
       <div><span>Category</span>${esc(CATEGORY_LABEL[r.category])}</div>
-      <div><span>Filed</span>${esc(new Date(r.reportedAt * 1000).toLocaleString("en-IN"))}</div>
-      <div><span>Signed by ($creator)</span>${addrLink(r.creator)}</div>
-      <div><span>Owner ($owner)</span>${addrLink(r.owner)}</div>
-      <div><span>Entity Expiration</span><strong data-exp="${r.expiresAt}">expires in ${remaining(r.expiresAt)}</strong> <span class="muted">(block ${r.expiresAt})</span></div>
-      <div><span>Creation flags</span>${r.readonly ? "read-only (nobody can edit it)" : "editable by owner"} · ${r.permissionlessExtension ? "anyone may extend its lifetime" : "only the owner may extend"}</div>
+      <div><span>Filed</span>${esc(new Date(r.reportedAt * 1000).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }))}</div>
+      <div><span>Signed by ($creator)</span><span>${addrLink(r.creator)}</span></div>
+      <div><span>Owner ($owner)</span><span>${addrLink(r.owner)}</span></div>
+      <div><span>Entity Expiration</span><span><strong data-exp="${r.expiresAt}">expires in ${remaining(r.expiresAt)}</strong> <span class="muted">(block ${r.expiresAt})</span></span></div>
+      <div><span>Creation flags</span><span>${r.readonly ? "read-only (nobody can edit it)" : "editable by owner"} · ${r.permissionlessExtension ? "anyone may extend its lifetime" : "only the owner may extend"}</span></div>
       <div><span>Entity</span><a class="mono" href="${EXPLORER}/entity/${esc(r.key)}" target="_blank" rel="noopener">${esc(short(r.key))}</a></div>
     </div>
 
