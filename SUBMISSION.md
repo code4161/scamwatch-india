@@ -18,7 +18,7 @@ Indian retail investors lose money every day to fake trading apps, "guaranteed I
 
 Challenges I ran into:
 
-The faucet needs a browser wallet sign-in and a CAPTCHA, and our build key never leaves a secret manager, so funding the wallet needed a separate step. AGENTS.md suggests range-filtering on $createdAt, which SDK 0.8.1 refuses because the field is not indexed; we store reported_at as a u64 instead. A confirmation has to keep a report alive without being able to edit it, which led to read-only reports with permissionless extension and a batch that creates the confirmation and extends the report in one transaction. Lifetime Extension sets an expiry rather than adding to it, so a naive 30-day extension of a report with more time left would revert the whole batch; we extend to an absolute block 30 days past the later of the current expiry and the head. Keeping personal data off the chain meant writing a normaliser that refuses phone numbers, UPI IDs, emails and wa.me links before anything is signed.
+The faucet needs a browser wallet sign-in and a CAPTCHA, and it paid the connected wallet instead of the recipient we typed, so funding took a manual transfer. The Tiramisu node rejected our first seed because it refuses upper-case letters in attribute names that the SDK's validator accepts. The public RPC's anonymous query budget (10000 cost units) ran out while our first live feed read back every entity created on the network, and viem then slept for the whole Retry-After, so the page froze without an error; the feed now filters events on their creation flags and batches its reads. AGENTS.md suggests range-filtering on $createdAt, which SDK 0.8.1 refuses because the field is not indexed; we store reported_at as a u64 instead. A confirmation has to keep a report alive without being able to edit it, which led to read-only reports with permissionless extension and a batch that creates the confirmation and extends the report in one transaction. Lifetime Extension sets an expiry rather than adding to it, so a naive 30-day extension of a report with more time left would revert the whole batch; we extend to an absolute block 30 days past the later of the current expiry and the head. Keeping personal data off the chain meant writing a normaliser that refuses phone numbers, UPI IDs, emails and wa.me links before anything is signed.
 
 ## Arkiv questions
 
@@ -73,6 +73,8 @@ Open the live app and paste pay.secure-login-tradebrokr.example into the check b
 10. Arkiv surfaces you used: TypeScript SDK, WebSocket events, Docs, Faucet, Block Explorer.
 
 11. Other surface: not applicable.
+
+12. How long after you started did you write your first Arkiv entity? 2 hours or less. Work started at 16:07 UTC on 2026-10-14 and the first entity (the curator's attestor listing, transaction 0x523bdf2325f6b2f7f10205aee95bec106cbccbb38447584ab41556fe32548c1f) landed at 17:31 UTC.
 
 13. Which LLMs did you use? Claude (Anthropic), as a coding assistant.
 

@@ -4,19 +4,23 @@ Kept while building ScamWatch India, 2026-10-14 onward. Versions: @arkiv-network
 
 Each entry: the surface, what we expected, what happened, how to reproduce, and what would fix it. Entries marked "worked" are tested paths that behaved as documented.
 
-## 1. Faucet: needs a wallet sign-in and a CAPTCHA, so a script or agent cannot fund a wallet
+## 1. Faucet: wallet sign-in and CAPTCHA, and the claim went to the connected wallet, not the recipient
 
 Surface: Faucet, hub.arkiv.network/faucet.
 
-Expected: the Tiramisu docs page says to get test GLM from the faucet, so we expected either a form that takes an address or an endpoint a CLI can call.
+Expected: the Tiramisu docs page says to get test GLM from the faucet, so we expected a form that takes an address, or an endpoint a CLI can call. Once we saw the form, we expected the GLM to go to the address typed in its recipient field.
 
-Actual: the page asks the visitor to connect a browser wallet ("Sign in with your wallet to claim testnet $GLM"), then shows an "I'm not a robot" CAPTCHA. The claim is a POST to /api/faucet with a recipient and a captchaToken; a GET to /api/faucet?recipient=<address> without a session returns {"error":"Unauthorized"}. The docs page does not mention the sign-in, the CAPTCHA, the amount per claim or the cooldown. Our build key lives in a secret manager and is never loaded into a browser wallet, so funding it needs a person with their own browser wallet who enters our address as the recipient.
+Actual: the page asks the visitor to connect a browser wallet ("Sign in with your wallet to claim testnet $GLM"), then shows an "I'm not a robot" CAPTCHA. The claim is a POST to /api/faucet with a recipient and a captchaToken; a GET to /api/faucet?recipient=<address> without a session returns {"error":"Unauthorized"}. The docs page does not mention the sign-in, the CAPTCHA, the amount per claim or the cooldown. Our build key lives in a secret manager and never goes into a browser wallet, so a person had to claim with their own wallet.
+
+On 2026-10-14 the owner signed in with a Keplr EVM account (0xAa50DB2d7c5593429C212Ed73FDA26b9D13B76c1) and set the recipient field to our curator address 0xBc223395380a7d53BE453E1Dacde40A20A370D06. The faucet sent 10 GLM to the connected Keplr account and ignored the recipient field; the curator stayed at 0 until a manual transfer (transaction 0xba9fbb31bdc6efbe150a560080a96764961f9f8cdd6983613e25e8a8b0b93f04, block 574633). Keplr also did not show the balance on the custom Tiramisu chain, so the claim looked as if it had failed.
 
 Reproduce:
 
     curl -s "https://hub.arkiv.network/api/faucet?recipient=0xBc223395380a7d53BE453E1Dacde40A20A370D06"
 
-Fix: state on the Tiramisu docs page that the faucet needs a connected wallet and a CAPTCHA, that the recipient can differ from the signed-in wallet, and the amount and cooldown. A rate-limited claim path for an access-key holder would let a CLI fund itself.
+Then claim in the browser with one wallet connected and a different address in the recipient field, and read both balances with eth_getBalance.
+
+Fix: send to the recipient field, or remove the field if the faucet only pays the signed-in wallet. On the Tiramisu docs page, state the sign-in, the CAPTCHA, the amount and the cooldown. A rate-limited claim path for an access-key holder would let a CLI fund itself.
 
 ## 2. AGENTS.md suggests range-filtering on $createdAt; SDK 0.8.1 refuses it
 
@@ -101,4 +105,79 @@ Surface: select().where().limit().fetch(), createdBy(), cursor pagination, tagge
 
 Expected: the rules in AGENTS.md.
 
-Actual: as documented. toString() returns the exact query string, which we show in the UI and in the README so a judge can paste it. Range operators on a str attribute throw UnsupportedOperatorError before the network. Attribute names are validated client-side, and "key" is reserved. The README warns that a bare number defaults to i32, so a u64 attribute queried with a bare number matches nothing; we always pass u64() on both sides.
+Actual: as documented. toString() returns the exact query string, which we show in the UI and in the README so a judge can paste it. Range operators on a str attribute throw UnsupportedOperatorError before the network. "key" is a reserved attribute name. Cursor pagination returned 5 and 5 of our 12 reports for limit(5), with both pages read at the same block.
+
+The SDK README warns that a bare number defaults to i32. Measured on our data on 2026-10-14: severity >= 3 written bare matched **0** reports, and severity >= u64(3) matched **10**. Nothing errors; the query is simply empty. We pass u64() on both sides everywhere.
+
+Fix: a warning when a predicate's type differs from every stored type of that attribute would turn a silent zero into an answer.
+
+## 9. Node rejects upper-case attribute names that the SDK accepts
+
+Surface: TypeScript SDK attribute validation and the Tiramisu node, createEntity and executeBatch.
+
+Expected: the SDK's validateAttributeName accepts reportedAt (its grammar is a letter, then letters, digits, ".", "-" or "_"), so we expected the node to accept it.
+
+Actual: the transaction was rejected before it landed:
+
+    Transaction failed: an attribute name holds "U" (0x55) at byte 7, which is outside the name charset ("A"-"Z", "a"-"z", "0"-"9", ".", "-" and "_", with a letter first)
+
+The message lists "A"-"Z" as allowed while rejecting "U". A lower-case name in the same script landed (transaction 0x96769addac21a58f6f60415541217a0359cfe52f8da87165000708e20731c6f0). Our first seed of 12 reports failed this way; we renamed reportedAt and confirmedAt to reported_at and confirmed_at.
+
+Reproduce:
+
+    import { validateAttributeName } from "@arkiv-network/sdk/attr"
+    validateAttributeName("swprobeUpper")   // passes
+    await wallet.createEntity({ attributes: { swprobeUpper: 1 }, payload: new Uint8Array(),
+      contentType: "application/octet-stream", expires: ExpirationTime.fromHours(1) })   // rejected
+
+Fix: make the SDK grammar and the node agree, and correct the node's error text.
+
+## 10. Explorer shows an absolute expiry block as a duration
+
+Surface: Block Explorer, entity page.
+
+Expected: the expiry of report 0xc70641410d53fc0b6a280a484bad195825f458fd28246c8a2ec666542cc1a8b5, which the SDK reads as block 4765119, about 97 days after the read at block 574778 (7 days at creation plus three 30-day extensions).
+
+Actual: the entity page says "Expires 4765119 blocks (~110d 7h) from block 574753". 4765119 is the absolute block; 4765119 blocks of 2 seconds is the 110 days shown. The operation history on the same page is right: one create and three extends, each with its transaction.
+
+Reproduce: open https://tiramisu.explorer.arkiv.network/entity/0xc70641410d53fc0b6a280a484bad195825f458fd28246c8a2ec666542cc1a8b5 and compare with getEntity(key).expiresAt.
+
+Fix: show "expires at block N (about D days from now)".
+
+## 11. Anonymous query budget is undocumented, and viem waits out the whole Retry-After
+
+Surface: public HTTP RPC (arkiv_query), the SDK's HTTP transport, and the Access Keys docs page.
+
+Expected: the Access Keys page says the public RPC "works without one, at the default rate limit". We expected a per-second limit.
+
+Actual: after about 40 minutes of building and testing from one IP, every arkiv_query returned HTTP 429:
+
+    ratelimit: limit=10000, remaining=0, reset=2604
+    retry-after: 2604
+    {"error":"ANON_COST_LIMITED","message":"unauthenticated query budget exhausted; get an API key at https://hub.arkiv.network for a monthly quota"}
+
+eth_blockNumber and eth_getTransactionReceipt kept working. Two things made this costly. First, viem's HTTP transport honours Retry-After, so an SDK query sleeps for the full 2604 seconds before it fails: our CLI and the web page looked frozen, with no error. Second, our first live feed read back every entity created on the network to find our own (entry 4), and Tiramisu creates entities every block, so an open tab spent the budget on other people's data.
+
+What we changed: the transports use retryCount 0 and show a plain message with the reset time; the page reads the RateLimit header (exposed to browsers through CORS, which helped) and shows the remaining budget in the status bar; the live feed filters EntityCreated events on their creation flags (our reports are created with flags 3, our confirmations with 1) and reads the survivors in one batched OR query every 2 seconds. An access key would raise the limit, but the docs advise keeping it out of the browser, and a backend would undo the censorship-resistance point, so each visitor reads on their own anonymous budget.
+
+Reproduce: send arkiv_query calls from one IP until the 429 arrives, then call any SDK query with the default http() transport and time it.
+
+Fix: state the anonymous budget (10000 cost units and the window) on the Access Keys page and the cost of a typical query; have the SDK pass retryCount 0 or cap the Retry-After wait for arkiv_query; a server-side filter on watchEntityEvents (entry 4) removes most of the load.
+
+## 12. Writes, batches and costs (worked)
+
+Surface: createEntity, executeBatch with creates and extensions, extendEntity through a batch, plain GLM transfers.
+
+Expected: the documented behaviour, and costs small enough to fund six demo wallets from one faucet claim.
+
+Actual, measured on 2026-10-14 from transaction receipts at a gas price of about 1 gwei:
+
+| write | gas | GLM |
+|---|---|---|
+| one attestor entity (createEntity) | 107,576 | 0.000108 |
+| four reports in one executeBatch | 510,000 | 0.000510 |
+| one confirmation plus one Lifetime Extension in one executeBatch | 126,360 | 0.000126 |
+| plain GLM transfer | 21,000 | 0.000021 |
+
+Everything the seven wallets wrote on 2026-10-14 (12 seed reports, 13 confirmations, 1 attestor, the probes in entries 9 and 11 and two end-to-end test reports) cost **0.0038 GLM** in gas, read from the balances afterwards. We gave each demo wallet 0.05 GLM. A read straight after a write saw the new state, so the seed could confirm a report in the block after filing it and stack three confirmations on one report.
+

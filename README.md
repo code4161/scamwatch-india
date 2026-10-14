@@ -62,6 +62,18 @@ All on Tiramisu. Explorer: https://tiramisu.explorer.arkiv.network/address/<addr
 
 The six demo wallets are derived in memory from the curator key (cli/wallets.ts), so no second secret is stored anywhere.
 
+## On-chain evidence
+
+Created on 2026-10-14, first entity at 17:31 UTC (block 574656). Read back with npx tsx cli/scamwatch.ts verify through the same library and public RPC the web app uses.
+
+| what | count | example on the explorer |
+|---|---|---|
+| attestor entity (curator lists the partner) | 1 | [tx 0x523bdf23...](https://tiramisu.explorer.arkiv.network/tx/0x523bdf2325f6b2f7f10205aee95bec106cbccbb38447584ab41556fe32548c1f) |
+| seed reports, filed as one batch per reporter | 12 | [4-report batch 0xd5ce2555...](https://tiramisu.explorer.arkiv.network/tx/0xd5ce25556b85529a08bc68610bf630c2b0a5ed8f4b2af901ca1d895df0eeda3d) |
+| confirmations, each batched with a Lifetime Extension | 13 | [confirm batch 0xbc6e81d4...](https://tiramisu.explorer.arkiv.network/tx/0xbc6e81d40ef78bb08b754f326930df23ec3c020b7e56464261edafd68ab7d4b1) |
+
+The report with the longest life shows the lease at work: [doubleyourmoney-in30days.example](https://tiramisu.explorer.arkiv.network/entity/0xc70641410d53fc0b6a280a484bad195825f458fd28246c8a2ec666542cc1a8b5) was filed with 7 days and confirmed by three wallets, so it now expires at block 4765119, 97 days after filing. Reports nobody confirmed (four of the twelve) expire 7 days after filing, on 2026-10-21.
+
 All demo data is synthetic. Every domain uses the reserved .example TLD, every app id sits under com.example, and every channel handle starts with swdemo. None of it names a real company or person.
 
 ## Setup
@@ -100,5 +112,6 @@ Writing needs a funded Tiramisu key in the environment, never in a file:
         npx tsx cli/scamwatch.ts check --kind site --target pay.secure-login-tradebrokr.example
         npx tsx cli/scamwatch.ts verify
 
-   verify lists every live report with its confirmation count and remaining lifetime, the trusted attestors found by createdBy, and prints a browse query string.
-5. Keep the home page open and run a confirm from the CLI. The confirmation appears in the live feed and the report's countdown moves out by 30 days without a reload.
+   verify lists every live report with its confirmation count and remaining lifetime, the trusted attestors found by createdBy, a browse query string, and the cost units the run spent as the RPC reports them.
+5. The status bar also shows how much of the public RPC's anonymous query budget your connection has left. Each visitor reads on their own budget; there is no shared key.
+6. Keep the home page open and run a confirm from the CLI. The confirmation appears in the live feed and the report's countdown moves out by 30 days without a reload.
