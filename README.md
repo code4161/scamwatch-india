@@ -6,6 +6,8 @@ Live app: **https://code4161.github.io/scamwatch-india/**
 
 Tracks: Best Indian Use Case, Censorship Resistance, Security.
 
+Demo video: [docs/demo.mp4](docs/demo.mp4) (1 minute 55 seconds; shot list and narration in [docs/demo-script.md](docs/demo-script.md)).
+
 ## Who uses it
 
 Indian retail investors and the family members they ask before they pay. The pattern is familiar to anyone in a family WhatsApp group: a stranger adds you to a "stock market learning" group, the group pushes a trading app that is not on the Play Store, the app shows large profits, and withdrawal needs one more fee. Other variants promise guaranteed IPO allotment, sell "sure-shot" F&O calls from a site displaying a SEBI registration number it does not hold, or clone a real broker's login page.
