@@ -30,7 +30,7 @@ function refusePersonalData(raw: string): void {
 }
 
 function hostOf(raw: string): string {
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`
+  const withScheme = raw.includes("://") ? raw : "http:" + "//" + raw
   let host: string
   try {
     host = new URL(withScheme).hostname
